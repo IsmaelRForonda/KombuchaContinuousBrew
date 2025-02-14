@@ -1,0 +1,233 @@
+import tkinter
+from tkinter import *
+from tkinter import ttk
+from PIL import ImageTk,Image
+import sqlite3
+
+
+#------------------------#
+# Databases
+#------------------------#
+
+# Create a Database or Connect to One
+conn = sqlite3.connect('KombuchaCalculator.db')
+c = conn.cursor() # Cursor
+
+# Create table if it doesn't exist
+c.execute("""
+CREATE TABLE IF NOT EXISTS F1Vessels ( -- Use IF NOT EXISTS
+    name TEXT,
+    empty_weight INTEGER
+)
+""")
+conn.commit()
+
+#========================#
+# FUNCTIONS
+#========================#
+
+#----------------------------#
+# Pop-up Edit Window Functions
+#----------------------------#
+
+# Create Function to Update a Record
+def update():
+    update = Tk()
+    update.title('Update a Record')
+    update.geometry("1200x400")
+
+    # Create text boxes
+    name_update = Entry(update, width=15)
+    name_update.grid(row=0, column=1, padx=15, pady=(20,0))
+    weight_update = Entry(update, width=15)
+    weight_update.grid(row=0, column=3, padx=15, pady=(20,0))
+
+    # Create text box labels
+    name_label_update = Label(update, text="Vessel name")
+    name_label_update.grid(row=0, column=0, padx=10, pady=(10,0))
+    eweight_label_update = Label(update, text="Weight of Empty Vessel")
+    eweight_label_update.grid(row=0, column=2, padx=10, pady=(10,0))
+
+    # Create a Save Button to Save Records
+    edit_btn = Button(update, text="Save Record", command=edit)
+    edit_btn.grid(row=4, column=0, columnspan=2, pady=10, padx=10, ipadx=50)
+
+    record_id = delete_box.get()
+
+    c.execute("SELECT *, FROM F1Vessels WHERE oid = " + record_id)
+    records = c.fetchall()
+
+    #Loop Through Results
+    for record in records:
+        name_update.insert(0, record[0])
+        weight_update.insert(0, record[1])
+
+# Create a Function to Edit a Record
+def edit():
+    conn = sqlite3.connect('KombuchaCalculator.db')
+    c = conn.cursor() # Cursor
+
+    # Get the ID to edit from the delete box
+    record_id = delete_box.get()
+
+    # Query the Database
+    c.execute("SELECT * FROM F1Vessels WHERE oid = ?", (record_id,))
+    records = c.fetchall()
+
+    
+
+    # Loop Through Results
+    print_records = ''
+    for record in records:
+        print_records += str(record[2]) + " " + str(record[0]) + " " + str(record[1])   
+
+    query_label = Label(root, text=print_records)
+    query_label.grid(row=3, column=0, padx= 10, sticky='w'+'e')
+
+    # Commit changes
+    conn.commit()
+
+    # Close Connection
+    conn.close()
+
+#---------------------------#
+# Database Window Functions
+#---------------------------#
+
+# Create Function to Delete a Record
+def delete():
+    conn = sqlite3.connect('KombuchaCalculator.db')
+    c = conn.cursor() # Cursor
+
+    # Delete a record
+    c.execute("DELETE from F1Vessels WHERE oid= " + delete_box.get())
+
+
+    # Commit changes
+    conn.commit()
+    # Close Connection
+    conn.close()
+
+# Submit Function for Database
+def submit():
+    global name, weight
+    c.execute("INSERT INTO F1Vessels VALUES (:name,:weight)",
+              {'name': name.get(), 'weight': weight.get()})
+
+    conn.commit()  # Commit *inside* the submit function
+
+    # Clear the Textboxes
+    name.delete(0, END)
+    weight.delete(0, END)
+
+    print("Values Submitted")
+
+# Create Query Function
+def query():
+    conn = sqlite3.connect('KombuchaCalculator.db')
+    c = conn.cursor()
+
+    c.execute("SELECT *, oid FROM F1Vessels")
+    records = c.fetchall()
+
+    # Create the Text widget (do this ONCE, outside the query function if possible)
+    global query_text  # Make it global so we can update it
+    try:
+        for item in query_tree.get_children():
+            query_tree.delete(item)
+    except NameError:
+        query_tree = ttk.Treeview(data_display, columns=("col1", "col2", "col3"), show="headings")
+        query_tree.heading("col1", text="Column 1")
+        query_tree.heading("col2", text="Column 2")
+        query_tree.heading("col3", text="Column 3")
+        query_tree.grid(row=2, column=0, columnspan=2, sticky="nsew")
+        data_display.grid_rowconfigure(2, weight=1)
+        data_display.grid_columnconfigure(0, weight=1)
+        data_display.grid_columnconfigure(1, weight=1)
+
+    for record in records:
+        query_tree.insert("", END, values=(record[2], record[0], record[1]))
+
+        conn.commit()
+        conn.close()
+
+#-----------------------------#
+# Database Page
+#-----------------------------#
+
+root = Tk()
+root.title('Testing Databases')
+root.geometry("800x400")
+
+#-----------------------------#
+# Creating Frames
+#-----------------------------#
+
+# Main Frame
+main_frame = Frame(root, name="database")
+main_frame.pack(anchor=NW)
+
+# Button Panel Frame
+control_frame = LabelFrame(main_frame, text="Buttons")
+control_frame.grid(row=0, column=0, padx= 10, sticky='w'+'e')
+
+# Data Entry Frame
+data_frame = LabelFrame(main_frame, text="Data Entry")
+data_frame.grid(row=1, column=0, padx= 10, ipady=5)
+#data_frame.pack(side=RIGHT)
+
+# Data Display Frame
+data_display = LabelFrame(main_frame, text="Data")
+data_display.grid(row=2, column=0, padx= 10, sticky='w'+'e')
+
+#-----------------------------#
+# Data Entry/Delete
+#-----------------------------#
+
+# Create text boxes
+name = Entry(data_frame, width=15)
+name.grid(row=0, column=1, padx=15)
+weight = Entry(data_frame, width=15)
+weight.grid(row=0, column=3, padx=15)
+delete_box = Entry(data_frame, width=15)
+delete_box.grid(row=0, column=5, padx=15)
+
+# Create text box labels
+name_label = Label(data_frame, text="Vessel name")
+name_label.grid(row=0, column=0, padx=10)
+eweight_label = Label(data_frame, text="Weight of Empty Vessel")
+eweight_label.grid(row=0, column=2, padx=10)
+delete_box_label = Label(data_frame, text="Delete Entry with ID:")
+delete_box_label.grid(row=0, column=4, padx=10)
+
+#-----------------------------#
+# Top Panel Buttons 
+#-----------------------------#
+
+# Create a Delete Button
+delete_btn = Button(control_frame, text="Delete Records", command=delete)
+delete_btn.grid(row=0, column=0, padx=5, pady=5)
+
+# Create a Submit button
+submit_btn = Button(control_frame, text="New Record", command=submit)
+submit_btn.grid(row=0, column=1, padx=5, pady=5)
+
+# Create an Update button
+update_btn = Button(control_frame, text="Update Record", command=update)
+update_btn.grid(row=0, column=3, padx=5, pady=5)
+
+#-----------------------------#
+# Data Display
+#-----------------------------#
+
+# Create a Query Button
+query_btn = Button(data_display, text="Show Records", command=query)
+query_btn.grid(row=0, column=0, padx=5, pady=5, sticky=W)
+
+# Commit changes
+#conn.commit()
+
+# Close Connection
+#conn.close()
+
+root.mainloop()
