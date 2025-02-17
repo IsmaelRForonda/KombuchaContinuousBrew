@@ -1,18 +1,26 @@
 import tkinter
 from tkinter import *
 from tkinter import ttk
+import sqlite3
 
-# import constants
+#========================#
+# Initialise Tkinter GUI
+#========================#
 
+# Start Tkinter Window & Name it
 window = tkinter.Tk()
 window.title("Continuous Kombucha Brewing Calculator")
 
+# Start Tabs
 tabControl = ttk.Notebook(window)
 calculator = ttk.Frame(tabControl)
 constants = ttk.Frame(tabControl)
+database_tab = ttk.Frame(tabControl)
 
+# Name New Tabs
 tabControl.add(calculator, text='Calculator')
 tabControl.add(constants, text='Constants')
+tabControl.add(database_tab, text='Vessels')
 
 tabControl.pack(expand=1, fill="both")
 
@@ -20,6 +28,9 @@ class FinishedBrewInfo():
     def __init__(self, eweight):
         self.eweight = eweight
         
+#========================#
+# FUNCTIONS
+#========================#
         
 def update_brew(*args):
     vsl_fw = 0
@@ -95,25 +106,175 @@ def old_update_brew(*args):
     brewed_kombucha = vsl_fw - vsl_empty
     total_kvolume_finished.config(text=f"{int(brewed_kombucha)}")
     
+#----------------------
+# Database Function(s)
+#----------------------
 
+# Create Query Function
+def query():
+    conn = sqlite3.connect('KombuchaCalculator.db')
+    c = conn.cursor()
+
+    c.execute("SELECT *, oid FROM F1Vessels")
+    records = c.fetchall()
+
+    # Create the Text widget (do this ONCE, outside the query function if possible)
+    try:
+        for item in query_tree.get_children():
+            query_tree.delete(item)
+    except:
+        pass
+
+    for record in records:
+        query_tree.insert("", END, values=(record[2], record[0], record[1]))
+
+    conn.commit()
+    conn.close()
+
+# Create Function to Submit a New DB Entry
+def submit():
+    conn = sqlite3.connect('KombuchaCalculator.db')
+    c = conn.cursor()
+
+    c.execute("INSERT INTO F1Vessels VALUES (:name,:weight)",
+              {'name': name.get(), 'weight': weight.get()})
+
+    conn.commit()  # Commit *inside* the submit function
+
+    # Clear the Textboxes
+    name.delete(0, END)
+    weight.delete(0, END)
+
+    conn = sqlite3.connect('KombuchaCalculator.db')
+    c = conn.cursor()
+
+    c.execute("SELECT *, oid FROM F1Vessels")
+    records = c.fetchall()
+
+    # Create the Text widget (do this ONCE, outside the query function if possible)
+    try:
+        for item in query_tree.get_children():
+            query_tree.delete(item)
+    except:
+        pass
+
+    for record in records:
+        query_tree.insert("", END, values=(record[2], record[0], record[1]))
+
+    conn.commit()
+    conn.close()
+    query()
+
+# Create Function to Delete a Record
+def delete():
+    conn = sqlite3.connect('KombuchaCalculator.db')
+    c = conn.cursor() # Cursor
+
+    # Delete a record
+    c.execute("DELETE from F1Vessels WHERE oid=" + change_box.get())
+
+    change_box.delete(0, END)
+
+    # Commit Changes and Close Connection
+    conn.commit()
+    conn.close()
+
+    query()
+
+#----------------------------#
+# Pop-up Edit Window Functions
+#----------------------------#
+
+# Create a window Used to Update a Record
+def update():
+    updatewindow = Tk()
+    updatewindow.title('Update a Record')
+    updatewindow.geometry("1200x400")
+
+    # Create text boxes
+    name_update = Entry(updatewindow, width=15)
+    name_update.grid(row=0, column=1, padx=15, pady=(20,0))
+    weight_update = Entry(updatewindow, width=15)
+    weight_update.grid(row=0, column=3, padx=15, pady=(20,0))
+
+    # Create text box labels
+    name_label_update = Label(updatewindow, text="Vessel name")
+    name_label_update.grid(row=0, column=0, padx=10, pady=(10,0))
+    eweight_label_update = Label(updatewindow, text="Weight of Empty Vessel")
+    eweight_label_update.grid(row=0, column=2, padx=10, pady=(10,0))
+
+    # Create a Save Button to Save Records
+    edit_btn = Button(updatewindow, text="Save Changes", command=lambda: edit(updatewindow, name_update, weight_update))
+    edit_btn.grid(row=4, column=0, columnspan=2, pady=10, padx=10, ipadx=50)
+
+    record_id = change_box.get()
+
+    conn = sqlite3.connect('KombuchaCalculator.db')
+    c = conn.cursor() # Cursor
+
+    c.execute("SELECT * FROM F1Vessels WHERE oid = " + record_id)
+    records = c.fetchall()
+
+    #Loop Through Results
+    for record in records:
+        name_update.insert(0, record[0])
+        weight_update.insert(0, record[1])
+    
+    # Commit changes & Close
+    conn.commit()
+    conn.close()
+
+# Create Function to Update a Record
+def edit(updatewindow, name_update, weight_update):
+    record_id = change_box.get()
+
+    try:
+        conn = sqlite3.connect('KombuchaCalculator.db')
+        c = conn.cursor()
+
+        new_name = name_update.get()
+        new_weight = weight_update.get()
+
+        try:
+            c.execute("UPDATE F1Vessels SET name =?, empty_weight =? WHERE oid =?", (new_name, new_weight, record_id))
+            conn.commit()
+            updatewindow.destroy()  # Close the update window *after* commit
+            query()
+        except Exception as e:
+            print("Error in updating record:", e)
+
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        # Handle the error appropriately
+
+    finally:  # Ensure connection is closed only once
+        if 'conn' in locals() and conn: # Check if the connection exists before closing
+            conn.close()
+            query()
+
+#========================#
+# Tab 1 -Calculator
+#========================#
+
+# Frame inside the window
 frame = tkinter.Frame(window)
 frame.pack()
 
-# Finished Brewing
+# Create frames and labels
 finished_frame = tkinter.LabelFrame(calculator, text="Finished Brew Info")
 finished_frame.grid(row=0, column=0)
-
 full_vessel_label = tkinter.Label(finished_frame, text="Full Vessel Weight (g)",)
 full_vessel_label.grid(row=0, column=1)
 empty_vessel_label = tkinter.Label(finished_frame, text="Empty Vessel Weight (g)",)
 empty_vessel_label.grid(row=0, column=2)
 
-
+# Create and set Default weight Values
 default_v1_weight = tkinter.StringVar()
 default_v2_weight = tkinter.StringVar()
 default_v1_weight.set("500")
 default_v2_weight.set("501")
 
+# Name and Initialise Data Entry for Vessel Weight
 vessel1_label = tkinter.Label(finished_frame, text="Vessel 1")
 vessel2_label = tkinter.Label(finished_frame, text="Vessel 2")
 vessel1_fullweight = tkinter.Entry(finished_frame)
@@ -121,20 +282,19 @@ vessel2_fullweight = tkinter.Entry(finished_frame)
 vessel1_emptyweight = tkinter.Entry(finished_frame, textvariable=default_v1_weight)
 vessel2_emptyweight = tkinter.Entry(finished_frame, textvariable=default_v2_weight)
 
+# Add Error Labels
 weight_error_label = tkinter.Label(finished_frame, text="")
 weight_error_v1 = tkinter.Label(finished_frame, text="")
 weight_error_v2 = tkinter.Label(finished_frame, text="")
+
+# Initialise Calculation Fields
 total_kvolume_finished_label = tkinter.Label(finished_frame, text="Total Kombucha (ml)")
 total_kvolume_finished = tkinter.Label(finished_frame, text="")
 kvolume_20percent_label = tkinter.Label(finished_frame, text="20% Continuous Brew (ml)")
 kvolume_20percent = tkinter.Label(finished_frame, text="")
-
 num_theoretical_brew = tkinter.StringVar()
-
 testvar = tkinter.StringVar()
-
 vessel1_fullweight["textvariable"] = testvar
-print("Testvar:", testvar)
 
 
 vessel1_label.grid(row=1, column=0)
@@ -201,5 +361,77 @@ total_kvolume_entry.grid(row=1, column=0)
 
 total_kvolume_entry["textvariable"] = num_theoretical_brew
 num_theoretical_brew.trace("w", update_brew) # "w" means write (changes to the variable)
+
+#§§§§§§§§§§§§§§§§§§
+# Databases Page
+#§§§§§§§§§§§§§§§§§§
+
+# Data Entry Frame
+data_frame = tkinter.LabelFrame(database_tab, text="New Vessel")
+data_frame.grid(row=0, column=0, padx= 10, ipady=5, sticky='w'+'e')
+
+# Change Records Frame
+control_frame = tkinter.LabelFrame(database_tab, text="Change Records by ID")
+control_frame.grid(row=0, column=1, padx= 10, ipady=5, sticky='n'+'e'+'w'+'s')
+
+# Data Display Frame
+data_display = tkinter.LabelFrame(database_tab, text="Data")
+data_display.grid(row=1, column=0, columnspan=2, padx= 10, ipady=5, ipadx=15, sticky='w'+'e')
+
+#-----------------------------#
+# New Vessel Data Entry
+#-----------------------------#
+
+# Create text box labels
+name_label = Label(data_frame, text="Vessel name")
+name_label.grid(row=0, column=0, padx=10)
+eweight_label = Label(data_frame, text="Weight of Empty Vessel")
+eweight_label.grid(row=1, column=0, padx=10)
+
+# Create text boxes
+name = Entry(data_frame, width=15)
+name.grid(row=0, column=1, padx=15)
+weight = Entry(data_frame, width=15)
+weight.grid(row=1, column=1, padx=15)
+
+# Create a Submit button
+submit_btn = Button(data_frame, text="New Record", command=lambda: [submit()])
+submit_btn.grid(row=2, column=0, columnspan=2, padx=12.5, pady=5, sticky='w'+'e')
+
+#-----------------------------#
+# Change Records Section 
+#-----------------------------#
+
+# Create text box label
+change_box_label = Label(control_frame, text="ID:")
+change_box_label.grid(row=0, column=0, padx=10, rowspan=1)
+
+# Create ID Entry box
+change_box = Entry(control_frame, width=15)
+change_box.grid(row=0, column=1, padx=15, rowspan=2)
+
+# Create a Delete Button
+delete_btn = Button(control_frame, text="Delete Record", command=lambda: [delete(), query()])
+delete_btn.grid(row=0, column=3, padx=5)
+
+# Create an Update button
+update_btn = Button(control_frame, text="Update Record", command= lambda: [update()])
+update_btn.grid(row=1, column=3, padx=5, pady=5)
+
+#-----------------------------#
+# Data Display
+#-----------------------------#
+
+#Treeview Code
+query_tree = ttk.Treeview(data_display, columns=("col1", "col2", "col3"), show="headings")
+query_tree.heading("col1", text="ID")
+query_tree.heading("col2", text="Vessel Name")
+query_tree.heading("col3", text="Weight (g)")
+query_tree.grid(row=2, column=0, columnspan=2, sticky="nsew")
+data_display.grid_rowconfigure(2, weight=1)
+data_display.grid_columnconfigure(0, weight=3)
+data_display.grid_columnconfigure(1, weight=2)
+
+query()
 
 window.mainloop()
